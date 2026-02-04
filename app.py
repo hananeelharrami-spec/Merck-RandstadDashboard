@@ -191,7 +191,21 @@ with t2:
                 c1.plotly_chart(fig, use_container_width=True)
                 fig2 = px.bar(df, x='Période', y=['Nb Requisitions', 'Nb Hired'], barmode='group')
                 c2.plotly_chart(fig2, use_container_width=True)
-                with st.expander("Détail"): st.dataframe(df)
+with st.expander("Détail"): st.dataframe(df)
+                    # ... (Après les graphiques existants) ...
+                st.markdown("---")
+                st.subheader("⏱️ Délai de Recrutement (Time to Hire)")
+                
+                if 'TTH Moyen (Mois)' in df.columns:
+                    fig_tth = px.line(
+                        df, 
+                        x='Période', 
+                        y='TTH Moyen (Mois)', 
+                        markers=True, 
+                        title="Évolution du délai moyen d'embauche (Jours)",
+                        color_discrete_sequence=['#FFA500'] # Orange
+                    )
+                    st.plotly_chart(fig_tth, use_container_width=True)
 
 # 3. ABSENTEISME
 with t3:
