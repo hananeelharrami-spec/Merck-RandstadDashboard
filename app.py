@@ -19,20 +19,20 @@ with col_k:
     effectif = c1.number_input("👥 Intérimaires en poste", value=133, step=1)
     nps = c2.number_input("⭐ NPS Intérimaire", value=9.1, step=0.1, format="%.1f")
 
-# --- FONCTION DE NETTOYAGE INTELLIGENTE ---
+# --- FONCTION DE NETTOYAGE ROBUSTE ---
 def clean_df(df):
+    # Nettoyage des noms de colonnes
     df.columns = df.columns.str.strip()
     
-    # LISTE DES COLONNES A NE PAS CONVERTIR EN NOMBRE (Textes)
-    # C'est ici que se situait le problème précédent
+    # Colonnes à ne JAMAIS convertir en nombres (Textes)
     protected_cols = ['Indicateur', 'Source', 'Service', 'Motif', 'Poste', 'Catégorie', 'Section']
     
     for col in df.columns:
-        # Si le nom de la colonne contient un mot protégé, on ne touche pas
+        # Si c'est une colonne texte protégée, on passe
         if any(p.upper() in col.upper() for p in protected_cols):
             continue
 
-        # Sinon, on tente de convertir en nombre
+        # Sinon, nettoyage des chiffres (ex: "12,5 %")
         if df[col].dtype == 'object':
             try:
                 s = df[col].astype(str).str.strip().str.replace('"', '').str.replace('\u202f', '').str.replace('\xa0', '')
@@ -40,7 +40,7 @@ def clean_df(df):
                 df[col] = pd.to_numeric(s, errors='coerce')
             except: pass
             
-    # Mise à l'échelle des % (0.88 -> 88.0)
+    # Mise à l'échelle des pourcentages (0.88 -> 88.0)
     for col in df.columns:
         if any(x in col.lower() for x in ['taux', '%', 'atteinte', 'rendement', 'validation']):
             if pd.api.types.is_numeric_dtype(df[col]):
@@ -54,44 +54,58 @@ def clean_df(df):
         
     return df
 
-# --- CHARGEMENT DES FICHIERS (CSV) ---
+# --- CHARGEMENT UNIVERSEL (EXCEL OU CSV) ---
 @st.cache_data
 def load_data():
     data = {}
     
-    # Mots-clés pour identifier les fichiers
-    keywords_map = {
+    # Mapping des onglets/fichiers attendus
+    mapping = {
         "YTD": "CONSOLIDATION_YTD",
         "RECRUT": "Recrutement_Mensuel",
         "ABS": "Absentéisme_Global_Mois",
         "ABS_MOTIF": "Absentéisme_Par_Motif",
         "ABS_SERVICE": "Absentéisme_Par_Service",
-        "SOURCE": "KPI_Sourcing", 
+        "SOURCE": "KPI_Sourcing", # Cherchera KPI_Sourcing... ou MerckPresel
         "PLAN": "Suivi_Plan_Action"
     }
     
-    # On prend tous les CSV du dossier
-    all_csvs = glob.glob("*.csv")
-    
-    if not all_csvs:
-        return None
+    # 1. ESSAI PRIORITAIRE : FICHIER EXCEL (.xlsx)
+    excel_files = glob.glob("*.xlsx")
+    if excel_files:
+        file_path = excel_files[0] # Prend le premier trouvé (ex: Dashboard Merck.xlsx)
+        try:
+            xls = pd.ExcelFile(file_path)
+            # Pour chaque clé, on cherche l'onglet correspondant
+            for key, name_part in mapping.items():
+                for sheet in xls.sheet_names:
+                    if name_part in sheet: # Match partiel (ex: "KPI_Sourcing" dans "KPI_Sourcing_Rendement")
+                        data[key] = clean_df(pd.read_excel(xls, sheet_name=sheet))
+                        break
+            if data:
+                return data # Si on a trouvé des données en Excel, on s'arrête là
+        except Exception as e:
+            st.warning(f"Fichier Excel trouvé mais erreur de lecture: {e}. Tentative CSV...")
 
-    for key, keyword in keywords_map.items():
-        for filename in all_csvs:
-            if keyword in filename:
-                try:
-                    # Lecture robuste
-                    df = pd.read_csv(filename, sep=None, engine='python')
-                    data[key] = clean_df(df)
-                except: pass
-                # On ne break pas forcément ici pour laisser une chance aux autres fichiers si doublons
+    # 2. ESSAI SECONDAIRE : FICHIERS CSV
+    csv_files = glob.glob("*.csv")
+    if csv_files:
+        for key, name_part in mapping.items():
+            for f in csv_files:
+                if name_part in f:
+                    try:
+                        df = pd.read_csv(f, sep=None, engine='python')
+                        data[key] = clean_df(df)
+                    except: pass
+                    break
+    
     return data
 
 data = load_data()
 
 if not data:
-    st.error("❌ Aucun fichier CSV trouvé.")
-    st.info("Les fichiers CSV (ex: 'Dashboard Merck... - CONSOLIDATION_YTD.csv') doivent être présents.")
+    st.error("❌ Aucune donnée trouvée.")
+    st.info("Veuillez uploader votre fichier 'Dashboard Merck.xlsx' (ou les CSV correspondants) sur GitHub.")
     st.stop()
 
 st.markdown("---")
@@ -120,7 +134,7 @@ with t1:
     st.subheader(f"Performance YTD - {annee_sel}")
     if "YTD" in data:
         df = filter(data["YTD"])
-        # On ne garde que les lignes où l'indicateur existe
+        # Suppression lignes vides
         df = df.dropna(subset=['Indicateur'])
         
         if not df.empty and 'Valeur YTD' in df.columns:
@@ -130,9 +144,12 @@ with t1:
                 val = r['Valeur YTD']
                 v_str = f"{val:.2f}%" if isinstance(val, (int, float)) else str(val)
                 
-                # --- PROTECTION ULTIME CONTRE LE CRASH ---
-                lbl = str(r['Indicateur'])
-                if lbl.lower() == "nan" or lbl.strip() == "": continue
+                # --- CORRECTIF CRASH (TypeError) ---
+                # On force la conversion en texte et on ignore les vides
+                raw_lbl = r['Indicateur']
+                if pd.isna(raw_lbl) or str(raw_lbl).lower() == 'nan':
+                    continue
+                lbl = str(raw_lbl)
                 
                 if annee_sel == "Vue Globale": lbl += f" ({r['Année']})"
                 cols[i % 4].metric(lbl, v_str)
@@ -189,11 +206,11 @@ with t4:
         if 'Source' in df.columns:
              df['Source_Clean'] = df['Source'].astype(str).str.upper().str.strip()
         
-        # Aggrégation sécurisée
+        # Le fichier Excel contient généralement l'onglet KPI calculé
         if '1. Appels Reçus' in df.columns:
              df_agg = df.groupby('Source_Clean')[['1. Appels Reçus', '2. Validés (Sél.)', '3. Intégrés (Délégués)']].sum().reset_index()
         elif 'Retenu Présel.' in df.columns:
-             # Fallback si fichier brut
+             # Fallback si brut
              df_agg = df.groupby('Source_Clean').agg(
                  Appels=('Source_Clean', 'count'),
                  Valides=('Retenu Sél.', lambda x: x.astype(str).str.contains('OUI', case=False).sum()),
@@ -222,23 +239,4 @@ with t4:
             
             st.markdown("---")
             st.subheader("🏆 Top 5 Sources")
-            df_top = df_agg.sort_values(['3. Intégrés (Délégués)', '1. Appels Reçus'], ascending=False).head(5)
-            df_top['Type'] = df_top['Source_Clean'].apply(lambda x: "Talent Center" if "TALENT" in x else "Autres")
-            fig = px.bar(df_top, x='Source_Clean', y='3. Intégrés (Délégués)', color='Type',
-                         text='3. Intégrés (Délégués)',
-                         color_discrete_map={"Talent Center": "#FF4500", "Autres": "#1f77b4"})
-            fig.update_traces(textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-            with st.expander("Données"): st.dataframe(df_agg)
-
-# 5. PLAN
-with t5:
-    if "PLAN" in data:
-        df = data["PLAN"]
-        row = df[df['Catégorie / Section'].astype(str).str.contains('GLOBAL', case=False, na=False)]
-        if not row.empty:
-            val = row.iloc[0]['% Atteinte']
-            fig = go.Figure(go.Indicator(mode="gauge+number", value=val, number={'suffix':"%"}, 
-                            title={'text':"Avancement"}, gauge={'axis':{'range':[None,100]}, 'bar':{'color':"green"}}))
-            st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(df)
+            df_top = df_
