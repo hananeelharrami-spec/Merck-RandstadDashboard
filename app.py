@@ -239,4 +239,23 @@ with t4:
             
             st.markdown("---")
             st.subheader("🏆 Top 5 Sources")
-            df_top = df_
+            df_top = df_agg.sort_values(['3. Intégrés (Délégués)', '1. Appels Reçus'], ascending=False).head(5)
+            df_top['Type'] = df_top['Source_Clean'].apply(lambda x: "Talent Center" if "TALENT" in x else "Autres")
+            fig = px.bar(df_top, x='Source_Clean', y='3. Intégrés (Délégués)', color='Type',
+                         text='3. Intégrés (Délégués)',
+                         color_discrete_map={"Talent Center": "#FF4500", "Autres": "#1f77b4"})
+            fig.update_traces(textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
+            with st.expander("Données"): st.dataframe(df_agg)
+
+# 5. PLAN
+with t5:
+    if "PLAN" in data:
+        df = data["PLAN"]
+        row = df[df['Catégorie / Section'].astype(str).str.contains('GLOBAL', case=False, na=False)]
+        if not row.empty:
+            val = row.iloc[0]['% Atteinte']
+            fig = go.Figure(go.Indicator(mode="gauge+number", value=val, number={'suffix':"%"}, 
+                            title={'text':"Avancement"}, gauge={'axis':{'range':[None,100]}, 'bar':{'color':"green"}}))
+            st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(df)
