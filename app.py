@@ -155,27 +155,6 @@ with t1:
                 cols[i % 4].metric(lbl, v_str)
         else:
             st.info(f"Pas de données YTD pour {annee_sel}")
-            # ... (Après l'affichage des cartes métriques) ...
-            st.markdown("---")
-            st.subheader("📊 Comparatif des Indicateurs")
-            
-            # Tri et Nettoyage pour le graphique
-            df_chart = df.sort_values('Valeur YTD', ascending=True)
-            # On exclut les lignes sans indicateur clair
-            df_chart = df_chart[df_chart['Indicateur'].astype(str).str.len() > 2]
-            
-            fig = px.bar(
-                df_chart, 
-                x='Valeur YTD', 
-                y='Indicateur', 
-                orientation='h', 
-                text='Valeur YTD',
-                color='Indicateur',
-                title=f"Synthèse des Résultats {annee_sel}"
-            )
-            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig.update_layout(showlegend=False, xaxis_title="Performance (%)", yaxis_title="")
-            st.plotly_chart(fig, use_container_width=True)
 
 # 2. RECRUTEMENT
 with t2:
@@ -191,21 +170,7 @@ with t2:
                 c1.plotly_chart(fig, use_container_width=True)
                 fig2 = px.bar(df, x='Période', y=['Nb Requisitions', 'Nb Hired'], barmode='group')
                 c2.plotly_chart(fig2, use_container_width=True)
-with st.expander("Détail"): st.dataframe(df)
-                    # ... (Après les graphiques existants) ...
-                st.markdown("---")
-                st.subheader("⏱️ Délai de Recrutement (Time to Hire)")
-                
-                if 'TTH Moyen (Mois)' in df.columns:
-                    fig_tth = px.line(
-                        df, 
-                        x='Période', 
-                        y='TTH Moyen (Mois)', 
-                        markers=True, 
-                        title="Évolution du délai moyen d'embauche (Jours)",
-                        color_discrete_sequence=['#FFA500'] # Orange
-                    )
-                    st.plotly_chart(fig_tth, use_container_width=True)
+                with st.expander("Détail"): st.dataframe(df)
 
 # 3. ABSENTEISME
 with t3:
