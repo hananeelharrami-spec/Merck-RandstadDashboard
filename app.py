@@ -155,6 +155,27 @@ with t1:
                 cols[i % 4].metric(lbl, v_str)
         else:
             st.info(f"Pas de données YTD pour {annee_sel}")
+            # ... (Après l'affichage des cartes métriques) ...
+            st.markdown("---")
+            st.subheader("📊 Comparatif des Indicateurs")
+            
+            # Tri et Nettoyage pour le graphique
+            df_chart = df.sort_values('Valeur YTD', ascending=True)
+            # On exclut les lignes sans indicateur clair
+            df_chart = df_chart[df_chart['Indicateur'].astype(str).str.len() > 2]
+            
+            fig = px.bar(
+                df_chart, 
+                x='Valeur YTD', 
+                y='Indicateur', 
+                orientation='h', 
+                text='Valeur YTD',
+                color='Indicateur',
+                title=f"Synthèse des Résultats {annee_sel}"
+            )
+            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig.update_layout(showlegend=False, xaxis_title="Performance (%)", yaxis_title="")
+            st.plotly_chart(fig, use_container_width=True)
 
 # 2. RECRUTEMENT
 with t2:
